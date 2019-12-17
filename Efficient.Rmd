@@ -1,0 +1,232 @@
+---
+title: "Efficient_code"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(chron)
+
+op12<-read.csv("er.csv")
+
+op12<-op12[round(op12$WT06)==2771434,]
+
+op12<-op12[op12$CASEID!=20100504102361,] 
+op12<-op12[1:91,]
+
+op12<-op12[131257:131292,]
+
+library(lubridate)
+
+day_1<-times("23:00:00")+times("01:00:00")
+
+op12$start1<-minute(strptime(op12$START, "%H:%M:%S"))%%5
+op12$stop1<-minute(strptime(op12$STOP, "%H:%M:%S"))%%5
+
+
+
+
+op12$START<-times(op12$START)
+
+op12$STOP<-times(op12$STOP)
+ 
+ 
+
+ 
+dod<-data.frame()
+
+#############################
+
+for (i in unique(op12$CASEID)){
+  op<-op12[op12$CASEID==i,]
+  
+  for (j in 1:nrow(op)) {
+    
+    if (op[j,9]>op[j,10]){
+      
+      op[j,10]<-day_1+op[j,10]
+      
+      for(k in j:(nrow(op)-1)){
+        if (j>(nrow(op)-1)){break}
+        op[k+1,10]<-day_1+op[k+1,10]
+        op[k+1,9]<-day_1+op[k+1,9]
+      }
+      dod<-rbind(dod,op)
+      break
+    }
+  } 
+}
+
+dod<-read.csv("atus.csv")
+dod<-dod[,c(-1,-2)]
+dod<-dod[1:109,]
+#############################
+kok<-seq(1/6,4/3,(1/(24*60))*5)
+kok<-times(kok)
+diss<-cut(kok,breaks=kok)[-1]
+class(diss)
+
+n1<-setNames(data.frame(matrix(ncol = 336, nrow = 0)), diss)
+library(lubridate)
+################################
+# EFFICIENCY 
+###############################
+t2<-round(as.numeric(times("00:02:00")),5)
+t3<-round(as.numeric(times("00:03:00")),5)
+r1<-times("00:00:00")
+library(chron)
+a1<-numeric()
+a2<-numeric()
+
+for (t in 1:336) {
+ a1[t]<-times("4:00:00")+r1
+ a2[t]<-times("4:05:00")+r1   
+   r1<-r1+times("00:05:00")
+}
+a1<-round(a1,5)
+a2<-round(a2,5)
+dod$START<-round(dod$START,5)
+dod$STOP<-round(dod$STOP,5)
+###############################
+# EFFICIENCY
+###############################
+
+library(fpCompare)
+tol = .Machine$double.eps^0.5       
+options(fpCompare.tolerance = tol)
+
+p<-0
+
+ 
+
+
+for (i in unique(dod$CASEID)){
+  
+  dd2<-dod[dod$CASEID==i,]  
+  p<-p+1
+  
+  for (j in 1:nrow(dd2)) {
+     
+    for (k in 1:336) {
+      
+      if (dd2$start1[j]!=0 | dd2$stop1[j]!=0) {
+        
+        ## First case
+        if (a1[k]%<<%dd2$START[j]  & a2[k]%>>%dd2$START[j] & a2[k]%<<%dd2$STOP[j])
+        {
+           
+          if((a2[k]-dd2$START[j]) %>=% t3){
+            
+            n1[p,k]<-dd2$ACTIVITY[j]
+          }
+        }
+        
+        ## Second case
+       else if (a1[k]%>=%dd2$START[j] & a2[k]%<=%dd2$STOP[j]){
+         
+         n1[p,k]<-dd2$ACTIVITY[j]
+        }
+        
+        ## Third case  
+      else  if(a1[k]%>>%dd2$START[j] &  a1[k]%<<%dd2$STOP[j]  & a2[k]%>>%dd2$STOP[j]) {
+           
+          
+          if (dd2$STOP[j]-a1[k]%>=%t3){
+            n1[p,k]<-dd2$ACTIVITY[j]
+          }
+        } 
+        
+        ## Fourth case ####
+      else  if(a1[k]%<=%dd2$START[j] & a2[k]%>=%dd2$STOP[j]){
+          
+          
+          if ((dd2$STOP[j]-dd2$START[j])%>=%t3){
+            n1[p,k]<-dd2$ACTIVITY[j]
+          }
+          
+        else if ((dd2$STOP[j]-dd2$START[j])%<=%t2){
+            if (is.na(n1[p,k])==T) {
+              l=1
+              samay<-vector()
+              work<-vector()
+              for (z in j:nrow(dd2)){
+                
+                if (a1[k]%<=%dd2$START[z] & a2[k]%>=%dd2$STOP[z]){
+                  samay[l]<-dd2$STOP[z]-dd2$START[z]
+                  work[l]<-  dd2$ACTIVITY[z]
+                }
+               else {
+                 samay[l]<-a2[k]-dd2$START[z]
+                work[l]<-dd2$ACTIVITY[z]
+              
+                
+                
+                break   
+               }
+              l=l+1  
+              }
+            samay<-c(dd2$STOP[j-1]-a1[k],samay)
+            work<-c(dd2$ACTIVITY[j-1],work)
+            ro<-tapply(samay,work,sum)
+            
+            if (length(which(samay%==%t2))==2){
+              if (length(samay)==3)
+              {
+            
+              lol<-which(samay%==%t2)!=2
+              if (lol[1]==T & lol[2]==T) {
+                n1[p,k]<-work[which(samay%==%t2)[sample(c(1,2),1)]]
+              }
+              else{n1[p,k]<-work[which(samay%==%t2)[lol]]}
+                
+            }
+            else if(length(samay)==4){
+              
+            if (samay[4]%==%t2){
+              n1[p,k]<-work[4]
+            }
+            else if (samay[1]%==%t2){
+            n1[p,k]<-work[1]  
+            }  
+          }
+             else{n1[p,k]<-work[sample(which(samay%==%t2),1)]}
+                
+            }
+            
+            
+          else{  n1[p,k]<-as.integer(names(ro)[which.max(ro)])}
+            
+            
+              
+          }
+        }   
+        
+      }
+    }
+      else{
+      
+        if (a1[k]%>=%dd2$START[j] & a2[k]%<=%dd2$STOP[j]) {                  
+      
+          n1[p,k]<-dd2$ACTIVITY[j]
+        }
+      }  
+      
+       
+      
+    }    
+  }
+}
+
+
+```
+
+ 
